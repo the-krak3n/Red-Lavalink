@@ -131,6 +131,7 @@ class Node:
         resume_timeout: int = 60,
         bot: Bot = None,
         client_name: Optional[str] = None,
+        name: Optional[str] = "Primary",
     ):
         """
         Represents a Lavalink node.
@@ -172,6 +173,7 @@ class Node:
         self.port = port
         self.password = password
         self._resume_key = resume_key
+        self.name = name
         if self._resume_key is None:
             self._resume_key = self._gen_key()
             self._client_name = client_name or f"Red-Lavalink-{__version__}--{self.bot.user.id}"
@@ -252,7 +254,11 @@ class Node:
 
         uri = "ws://{}:{}".format(self.host, self.port)
 
-        ws_ll_log.info("Lavalink WS connecting to %s with headers %s", uri, self.headers)
+        ws_ll_log.info(
+            "Lavalink WS connecting to %s with headers %s",
+            uri,
+            self._get_connect_headers(show_password=False),
+        )
 
         for task in asyncio.as_completed([self._multi_try_connect(uri)], timeout=timeout):
             with contextlib.suppress(Exception):
@@ -261,7 +267,7 @@ class Node:
         else:
             raise asyncio.TimeoutError
 
-        ws_ll_log.debug("Creating Lavalink WS listener.")
+        ws_ll_log.debug("[NODE-%s] | Creating listener.", self.name)
         if self._listener_task is not None:
             self._listener_task.cancel()
         self._listener_task = self.loop.create_task(self.listener())
@@ -285,14 +291,14 @@ class Node:
                 )
             )
             self._resuming_configured = True
-            ws_ll_log.debug("Server Resuming has been configured.")
+            ws_ll_log.debug("[NODE-%s] | Resuming has been configured.", self.name)
 
     async def wait_until_ready(self, timeout: Optional[float] = None):
         await asyncio.wait_for(self._ready_event.wait(), timeout=timeout)
 
-    def _get_connect_headers(self) -> dict:
+    def _get_connect_headers(self, show_password: bool = True) -> dict:
         headers = {
-            "Authorization": self.password,
+            "Authorization": self.password if show_password else "*" * len(self.password),
             "User-Id": str(self.user_id),
             "Client-Name": str(self._client_name),
         }
@@ -303,7 +309,7 @@ class Node:
     @property
     def lavalink_major_version(self):
         if not self.ready:
-            raise RuntimeError("Node not ready!")
+            raise RuntimeError(f"[NODE-{self.name}] | Node not ready!")
         return self._ws.response_headers.get("Lavalink-Major-Version")
 
     @property
@@ -325,18 +331,25 @@ class Node:
                 ws = await self.session.ws_connect(url=uri, headers=self.headers, heartbeat=60)
             except (OSError, aiohttp.ClientConnectionError):
                 delay = backoff.delay()
-                ws_ll_log.error("Failed connect attempt %s, retrying in %s", attempt, delay)
+                ws_ll_log.error(
+                    "[NODE-%s] |Failed connect attempt %s, retrying in %s",
+                    self.name,
+                    attempt,
+                    delay,
+                )
                 await asyncio.sleep(delay)
                 attempt += 1
                 if attempt > 5:
                     raise asyncio.TimeoutError
             except aiohttp.WSServerHandshakeError:
-                ws_ll_log.error("Failed connect WSServerHandshakeError")
+                ws_ll_log.error("[NODE-%s] | Failed connect WSServerHandshakeError", self.name)
                 return None
             else:
                 self.session_resumed = ws._response.headers.get("Session-Resumed", False)
                 if self._ws is not None and self.session_resumed:
-                    ws_ll_log.info("WEBSOCKET Resumed Session with key: %s", self._resume_key)
+                    ws_ll_log.info(
+                        "[NODE-%s] | Resumed Session with key: %s", self.name, self._resume_key
+                    )
                 self._ws = ws
                 return self._ws
 
@@ -349,35 +362,39 @@ class Node:
             if msg.type in self._closers:
                 if self._resuming_configured:
                     if self.state != NodeState.RECONNECTING:
-                        ws_ll_log.info("[NODE] | NODE Resuming: %s", msg.extra)
+                        ws_ll_log.info("[NODE-%s] | Resuming: %s", self.name, msg.extra)
                         self.update_state(NodeState.RECONNECTING)
                         self.loop.create_task(self._reconnect())
                     return
                 else:
-                    ws_ll_log.info("[NODE] | Listener closing: %s", msg.extra)
+                    ws_ll_log.info("[NODE-%s] | Listener closing: %s", self.name, msg.extra)
                     break
             elif msg.type == aiohttp.WSMsgType.TEXT:
                 data = msg.json(loads=json.loads)
                 try:
                     op = LavalinkIncomingOp(data.get("op"))
                 except ValueError:
-                    ws_ll_log.info("[NODE] | Received unknown op: %s", data)
+                    ws_ll_log.info("[NODE-%s] | Received unknown op: %s", self.name, data)
                 else:
-                    ws_ll_log.debug("[NODE] | Received known op: %s", data)
+                    ws_ll_log.debug("[NODE-%s] | Received known op: %s", self.name, data)
                     self.loop.create_task(self._handle_op(op, data))
             elif msg.type == aiohttp.WSMsgType.ERROR:
                 exc = self._ws.exception()
-                ws_ll_log.info("[NODE] | Exception in WebSocket!", exc_info=exc)
+                ws_ll_log.info("[NODE-%s] | Exception in WebSocket!", self.name, exc_info=exc)
                 break
             else:
                 ws_ll_log.info(
-                    "[NODE] | WebSocket connection received unexpected message: %s:%s",
+                    "[NODE-%s] | WebSocket connection received unexpected message: %s:%s",
+                    self.name,
                     msg.type,
                     msg.data,
                 )
         if self.state != NodeState.RECONNECTING:
             ws_ll_log.warning(
-                "[NODE] | %s - WS %s SHUTDOWN %s.", self, not self._ws.closed, self._is_shutdown
+                "[NODE-%s] | WS closed: %s | Node Shutdown: %s.",
+                self.name,
+                self._ws.closed,
+                self._is_shutdown,
             )
             self.update_state(NodeState.RECONNECTING)
             self.loop.create_task(self._reconnect())
@@ -387,7 +404,7 @@ class Node:
             try:
                 event = LavalinkEvents(data.get("type"))
             except ValueError:
-                ws_ll_log.info("Unknown event type: %s", data)
+                ws_ll_log.info("[NODE-%s] | Unknown event type: %s", self.name, data)
             else:
                 self.event_handler(op, event, data)
         elif op == LavalinkIncomingOp.PLAYER_UPDATE:
@@ -409,13 +426,13 @@ class Node:
             self.stats = NodeStats(data)
             self.event_handler(op, stats, data)
         else:
-            ws_ll_log.info("Unknown op type: %r", data)
+            ws_ll_log.info("[NODE-%s] | Unknown op type: %r", self.name, data)
 
     async def _reconnect(self):
         self._ready_event.clear()
 
         if self._is_shutdown is True:
-            ws_ll_log.info("[NODE] | Shutting down Lavalink WS.")
+            ws_ll_log.info("[NODE-%] | Node is shutting down.", self.name)
             return
         if self.state != NodeState.CONNECTING:
             self.update_state(NodeState.RECONNECTING)
@@ -429,15 +446,16 @@ class Node:
                 await self.connect()
             except asyncio.TimeoutError:
                 delay = backoff.delay()
-                ws_ll_log.info("[NODE] | Failed to reconnect to the Lavalink server.")
+                ws_ll_log.info("[NODE-%s] | Failed to reconnect.", self.name)
                 ws_ll_log.info(
-                    "[NODE] | Lavalink WS reconnect connect attempt %s, retrying in %s",
+                    "[NODE-%s] | Node WS reconnect connect attempt %s, retrying in %s",
+                    self.name,
                     attempt,
                     delay,
                 )
 
             else:
-                ws_ll_log.info("[NODE] | Reconnect successful.")
+                ws_ll_log.info("[NODE-%s] | Reconnect successful.", self.name)
                 self.dispatch_reconnect()
                 self._retries = 0
 
@@ -459,11 +477,15 @@ class Node:
         if next_state == self.state:
             return
 
-        ws_ll_log.debug("Changing node state: %s -> %s", self.state.name, next_state.name)
+        ws_ll_log.debug(
+            "[NODE-%s] | Changing state: %s -> %s", self.name, self.state.name, next_state.name
+        )
         old_state = self.state
         self.state = next_state
         if self.loop.is_closed():
-            ws_ll_log.debug("Event loop closed, not notifying state handlers.")
+            ws_ll_log.debug(
+                "[NODE-%s] | Event loop closed, not notifying state handlers.", self.name
+            )
             return
         for handler in self._state_handlers:
             self.loop.create_task(handler(next_state, old_state))
@@ -510,13 +532,13 @@ class Node:
         self._state_handlers = []
 
         _nodes.remove(self)
-        ws_ll_log.info("Shutdown Lavalink WS.")
+        ws_ll_log.info("[NODE-%s] | Shutdown WS.", self.name)
 
     async def send(self, data):
         if self._ws is None or self._ws.closed:
             self._queue.append(data)
         else:
-            ws_ll_log.debug("Sending data to Lavalink: %s", data)
+            ws_ll_log.debug("[NODE-%s] | Sending data: %s", self.name, data)
             await self._ws.send_json(data)
 
     async def send_lavalink_voice_update(self, guild_id, session_id, event):
@@ -792,6 +814,9 @@ async def on_socket_response(data):
         )
     else:
         ws_ll_log.debug(
-            f"Received Discord WS voice response for guild: %d, %s", int(guild_id), data
+            f"[NODE-%s] | Received Discord WS voice response for guild: %d, %s",
+            node.name,
+            int(guild_id),
+            data,
         )
         await node.player_manager.on_socket_response(data)

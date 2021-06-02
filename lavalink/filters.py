@@ -282,7 +282,7 @@ class Equalizer(FilterMixin):
         block = ""
         bands = [str(band + 1).zfill(2) for band in range(self.band_count)]
         bottom = (" " * 8) + " ".join(bands)
-        gains = [x * 0.01 for x in range(-25, 105,  5)]
+        gains = [x * 0.01 for x in range(-25, 105, 5)]
         gains.reverse()
 
         for gain in gains:

@@ -213,6 +213,7 @@ class Node:
     def __repr__(self):
         return (
             "<Node: "
+            f"name={self.name}, "
             f"state={self.state.name}, "
             f"host={self.host}, "
             f"port={self.port}, "

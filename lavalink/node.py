@@ -433,7 +433,7 @@ class Node:
         self._ready_event.clear()
 
         if self._is_shutdown is True:
-            ws_ll_log.info("[NODE-%] | Node is shutting down.", self.name)
+            ws_ll_log.info("[NODE-%s] | Node is shutting down.", self.name)
             return
         if self.state != NodeState.CONNECTING:
             self.update_state(NodeState.RECONNECTING)

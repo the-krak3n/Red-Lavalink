@@ -256,7 +256,8 @@ class Node:
         uri = "ws://{}:{}".format(self.host, self.port)
 
         ws_ll_log.info(
-            "Lavalink WS connecting to %s with headers %s",
+            "[NODE-%s] | Lavalink WS connecting to %s with headers %s",
+            self.name,
             uri,
             self._get_connect_headers(show_password=False),
         )

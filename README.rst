@@ -1,15 +1,9 @@
 ============
 Red-Lavalink
 ============
-
-.. image:: https://api.travis-ci.org/Cog-Creators/Red-Lavalink.svg?branch=develop
-    :target: https://travis-ci.org/Cog-Creators/Red-Lavalink
-    :alt: Travis CI status
-
-.. image:: https://readthedocs.org/projects/red-lavalink/badge/?version=latest
-    :target: http://red-lavalink.readthedocs.io/en/latest/?badge=latest
-    :alt: Documentation Status
-    
+.. image:: https://img.shields.io/discord/850282003425394699?color=7289da&label=Support%20Server&logo=Discord&style=plastic&labelColor=292f35&logoColor=878f96
+    :target: https://discord.gg/bdnjFPQQaZ
+    :alt: Support Server
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
     :target: https://github.com/ambv/black
     :alt: Code style: black

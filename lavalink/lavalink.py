@@ -133,7 +133,7 @@ def get_player(guild_id: int) -> player_manager.Player:
 
 
 def fetch_node(name: str) -> Optional[node.Node]:
-    return next((x for x in node._nodes if x.name == name), default=None)
+    return next((x for x in node._nodes if x.name == name), None)
 
 async def _on_guild_remove(guild):
     try:

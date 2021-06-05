@@ -5,6 +5,7 @@ import contextlib
 import secrets
 import string
 import typing
+import urllib.parse
 from collections import namedtuple
 from typing import Awaitable, List, Optional, cast
 
@@ -122,9 +123,7 @@ class Node:
         _loop: asyncio.BaseEventLoop,
         event_handler: typing.Callable,
         voice_ws_func: typing.Callable,
-        host: str,
         password: str,
-        port: int,
         user_id: int,
         num_shards: int,
         resume_key: Optional[str] = None,
@@ -132,6 +131,9 @@ class Node:
         bot: Bot = None,
         client_name: Optional[str] = None,
         name: Optional[str] = "Primary",
+        rest_uri: Optional[str] = None,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
     ):
         """
         Represents a Lavalink node.
@@ -165,6 +167,11 @@ class Node:
         client_name: str
             The name of the connecting client.
         """
+        if not rest_uri:
+            if not all([port, host]):
+                raise RuntimeError(
+                    "`rest_uri` must be provided if both `port` and `host` are not."
+                )
         self.loop = _loop
         self.bot = bot
         self.event_handler = event_handler
@@ -173,6 +180,12 @@ class Node:
         self.port = port
         self.password = password
         self._resume_key = resume_key
+        self.rest_uri = rest_uri
+        if self.rest_uri:
+            ws_url = urllib.parse.urlparse(self.rest_uri)
+            self.ws_uri = f"ws://{ws_url.netloc}"
+        else:
+            self.ws_uri = f"ws://{self.host}:{self.port}"
         self.name = name
         if self._resume_key is None:
             self._resume_key = self._gen_key()
@@ -217,6 +230,7 @@ class Node:
             f"state={self.state.name}, "
             f"host={self.host}, "
             f"port={self.port}, "
+            f"rest_uri={self.rest_uri}, "
             f"password={'*' * len(self.password)}, resume_key={self._resume_key}, "
             f"shards={self.num_shards}, user={self.user_id}, stats={self.stats}>"
         )
@@ -253,16 +267,14 @@ class Node:
         """
         self._is_shutdown = False
 
-        uri = "ws://{}:{}".format(self.host, self.port)
-
         ws_ll_log.info(
             "[NODE-%s] | Lavalink WS connecting to %s with headers %s",
             self.name,
-            uri,
+            self.ws_uri,
             self._get_connect_headers(show_password=False),
         )
 
-        for task in asyncio.as_completed([self._multi_try_connect(uri)], timeout=timeout):
+        for task in asyncio.as_completed([self._multi_try_connect(self.ws_uri)], timeout=timeout):
             with contextlib.suppress(Exception):
                 if await cast(Awaitable[Optional[aiohttp.ClientWebSocketResponse]], task):
                     break
@@ -280,6 +292,7 @@ class Node:
             self._queue.clear()
         self._ready_event.set()
         self.update_state(NodeState.READY)
+        ws_ll_log.info("[NODE-%s] | WS Connected - Listening.", self.name)
 
     async def _configure_resume(self):
         if self._resuming_configured:

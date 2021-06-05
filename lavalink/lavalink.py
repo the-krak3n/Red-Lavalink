@@ -38,6 +38,7 @@ async def initialize(
     resume_key: Optional[str] = None,
     resume_timeout: int = 60,
     node_name: str = "Primary",
+    rest_uri: Optional[str] = None,
 ):
     """
     Initializes the websocket connection to the lavalink player.
@@ -75,18 +76,19 @@ async def initialize(
     register_update_listener(_handle_update)
 
     lavalink_node = node.Node(
-        _loop,
-        dispatch,
-        bot._connection._get_websocket,
-        host,
-        password,
-        port=ws_port,
+        _loop=_loop,
+        event_handler=dispatch,
+        voice_ws_func=bot._connection._get_websocket,
+        password=password,
         user_id=player_manager.user_id,
         num_shards=bot.shard_count if bot.shard_count is not None else 1,
         resume_key=resume_key,
         resume_timeout=resume_timeout,
         bot=bot,
         name=node_name,
+        host=host,
+        port=ws_port,
+        rest_uri=rest_uri,
     )
 
     await lavalink_node.connect(timeout=timeout)

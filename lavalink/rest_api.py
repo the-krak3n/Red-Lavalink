@@ -284,9 +284,11 @@ class RESTClient:
         self.node = node
         self._session = None
         if node.rest_uri:
-            self._uri = f"{node.rest_uri}/loadtracks?identifier="
+            self._uri = f"{node.rest_uri}"
         else:
-            self._uri = f"http://{node.host}:{node.port}/loadtracks?identifier="
+            self._uri = f"{node.host}:{node.port}"
+        self._load_track_uri = f"{self._uri}/loadtracks?identifier="
+        self._metadata_uri = f"{self._uri}/metadata"
         self._headers = {"Authorization": node.password}
 
         self.state = PlayerState.CONNECTING
@@ -300,6 +302,13 @@ class RESTClient:
     def __check_node_ready(self):
         if self.state != PlayerState.READY:
             raise RuntimeError("Cannot execute REST request when node not ready.")
+
+    async def server_metadata(self):
+        try:
+            async with self._session.get(self._metadata_uri, headers=self._headers) as resp:
+                return await resp.json(content_type=None, loads=json.loads)
+        except ServerDisconnectedError:
+            return {}
 
     async def _get(self, url):
         try:
@@ -334,7 +343,7 @@ class RESTClient:
         self.__check_node_ready()
         _raw_url = str(query)
         parsed_url = reformat_query(_raw_url)
-        url = self._uri + quote(parsed_url)
+        url = self._load_track_uri + quote(parsed_url)
 
         data = await self._get(url)
         if isinstance(data, dict):

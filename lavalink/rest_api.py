@@ -306,6 +306,8 @@ class RESTClient:
     async def server_metadata(self):
         try:
             async with self._session.get(self._metadata_uri, headers=self._headers) as resp:
+                if resp.status != 200:
+                    return {}
                 return await resp.json(content_type=None, loads=json.loads)
         except ServerDisconnectedError:
             return {}

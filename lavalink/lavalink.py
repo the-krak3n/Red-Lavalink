@@ -20,6 +20,7 @@ __all__ = [
     "all_players",
     "all_connected_players",
     "active_players",
+    "fetch_node"
 ]
 
 
@@ -130,6 +131,9 @@ def get_player(guild_id: int) -> player_manager.Player:
     node_ = node.get_node(guild_id)
     return node_.player_manager.get_player(guild_id)
 
+
+def fetch_node(name: str) -> Optional[node.Node]:
+    return next((x for x in node._nodes if x.name == name), default=None)
 
 async def _on_guild_remove(guild):
     try:

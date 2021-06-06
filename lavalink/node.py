@@ -10,6 +10,8 @@ from collections import namedtuple
 from typing import Awaitable, List, Optional, cast
 
 import aiohttp
+from aiohttp import ServerDisconnectedError
+from async_lru import alru_cache
 from discord.backoff import ExponentialBackoff
 from discord.ext.commands import Bot
 
@@ -181,11 +183,12 @@ class Node:
         self.password = password
         self._resume_key = resume_key
         self.rest_uri = rest_uri
-        if self.rest_uri:
-            ws_url = urllib.parse.urlparse(self.rest_uri)
-            self.ws_uri = f"ws://{ws_url.netloc}"
-        else:
-            self.ws_uri = f"ws://{self.host}:{self.port}"
+
+        if not self.rest_uri:
+            self.rest_uri = f"{self.host}:{self.port}"
+        ws_url = urllib.parse.urlparse(self.rest_uri)
+        self.ws_uri = f"ws://{ws_url.netloc}"
+
         self.name = name
         if self._resume_key is None:
             self._resume_key = self._gen_key()
@@ -222,6 +225,18 @@ class Node:
             aiohttp.WSMsgType.CLOSING,
             aiohttp.WSMsgType.CLOSED,
         )
+        self._metadata_uri = f"{self.rest_uri}/metadata"
+
+    @alru_cache(maxsize=32, cache_exceptions=False)
+    async def server_metadata(self):
+        try:
+            async with aiohttp.ClientSession(json_serialize=json.dumps) as session:
+                async with session.get(f"{self._metadata_uri}", headers=self.headers) as resp:
+                    if resp.status != 200:
+                        return {}
+                    return await resp.json(content_type=None, loads=json.loads)
+        except ServerDisconnectedError:
+            return {}
 
     def __repr__(self):
         return (

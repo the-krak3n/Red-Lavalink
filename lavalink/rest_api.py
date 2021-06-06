@@ -5,7 +5,6 @@ from urllib.parse import quote, urlparse
 
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import ServerDisconnectedError
-from async_lru import alru_cache
 
 try:
     from redbot import json
@@ -304,15 +303,8 @@ class RESTClient:
         if self.state != PlayerState.READY:
             raise RuntimeError("Cannot execute REST request when node not ready.")
 
-    @alru_cache(maxsize=32, cache_exceptions=False)
     async def server_metadata(self):
-        try:
-            async with self._session.get(self._metadata_uri, headers=self._headers) as resp:
-                if resp.status != 200:
-                    return {}
-                return await resp.json(content_type=None, loads=json.loads)
-        except ServerDisconnectedError:
-            return {}
+        return await self.node.server_metadata()
 
     async def _get(self, url):
         try:

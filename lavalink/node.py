@@ -839,14 +839,14 @@ async def on_socket_response(data):
     try:
         node = get_node(guild_id, ignore_ready_status=True)
     except IndexError:
-        ws_discord_log.info(
-            f"Received unhandled Discord WS voice response for guild: %d, %s", int(guild_id), data
+        ws_ll_log.debug(
+            f"Received unhandled Discord WS voice response for guild: %s, %s", guild_id, data
         )
     else:
         ws_ll_log.debug(
-            f"[NODE-%s] | Received Discord WS voice response for guild: %d, %s",
+            f"[NODE-%s] | Received Discord WS voice response for guild: %s, %s",
             node.name,
-            int(guild_id),
+            guild_id,
             data,
         )
         await node.player_manager.on_socket_response(data)

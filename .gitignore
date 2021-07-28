@@ -321,6 +321,11 @@ cython_debug/
 # *.iml
 # *.ipr
 
+# User-specific stuff:
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
 # CMake
 cmake-build-*/
 
